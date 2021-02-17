@@ -2,11 +2,14 @@
 
 namespace DTApi\Http\Controllers;
 
+use DB;
 use DTApi\Models\Job;
 use DTApi\Http\Requests;
 use DTApi\Models\Distance;
 use Illuminate\Http\Request;
 use DTApi\Repository\BookingRepository;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Monolog\Logger;
 
 /**
  * Class BookingController
@@ -31,18 +34,34 @@ class BookingController extends Controller
 
     /**
      * @param Request $request
-     * @return mixed
+     * @return \Illuminate\Contracts\Routing\ResponseFactory|\Symfony\Component\HttpFoundation\Response
      */
     public function index(Request $request)
     {
-        if($user_id = $request->get('user_id')) {
+        if ($user_id = $request->get('user_id')) {
+            try {
+                $response = [
+                    'success' => true,
+                    'message' => 'ok',
+                    'data' => $this->repository->getUsersJobs($user_id),
+                    'error_code' => null,
+                ];
+            }catch (\Exception $exception){
+                $response = [
+                    'success' => false,
+                    'message' => $exception->getMessage(),
+                    'data' => [],
+                    'error_code' => 404,
+                ];
+            }
 
-            $response = $this->repository->getUsersJobs($user_id);
-
-        }
-        elseif($request->__authenticatedUser->user_type == env('ADMIN_ROLE_ID') || $request->__authenticatedUser->user_type == env('SUPERADMIN_ROLE_ID'))
-        {
-            $response = $this->repository->getAll($request);
+        } elseif ($request->__authenticatedUser->user_type == config('access.admin_role_id') || $request->__authenticatedUser->user_type == config('superadmin_role_id')) {
+            $response = [
+                'success' => true,
+                'message' => 'ok',
+                'data' => $this->repository->getAll($request),
+                'error_code' => null,
+            ];
         }
 
         return response($response);
@@ -50,66 +69,156 @@ class BookingController extends Controller
 
     /**
      * @param $id
-     * @return mixed
+     * @return \Illuminate\Contracts\Routing\ResponseFactory|\Symfony\Component\HttpFoundation\Response
      */
     public function show($id)
     {
-        $job = $this->repository->with('translatorJobRel.user')->find($id);
+        try {
+            $response = [
+                'success' => true,
+                'message' => 'ok',
+                'data' => $this->repository->with('translatorJobRel.user')->find($id),
+                'error_code' => null,
+            ];
+        }catch (\Exception $exception){
+            $response = [
+                'success' => false,
+                'message' => $exception->getMessage(),
+                'data' => [],
+                'error_code' => '',
+            ];
+        }
 
-        return response($job);
+        return response($response);
     }
 
     /**
      * @param Request $request
-     * @return mixed
+     * @return \Illuminate\Contracts\Routing\ResponseFactory|\Symfony\Component\HttpFoundation\Response
      */
-    public function store(Request $request)
+    public function store(StoreBookingRequest $request)
     {
-        $data = $request->all();
+        /*
+         * We need to perform data validation before sending data to repository
+         */
+        $data = $request->validated();
 
-        $response = $this->repository->store($request->__authenticatedUser, $data);
+        $cuser = $request->__authenticatedUser;
+        try {
+            $response = [
+                'success' => true,
+                'message' => 'ok',
+                'data' => $this->repository->store($cuser, $data),
+                'error_code' => null,
+            ];
+        }catch (\Exception $exception){
+            report($exception);
+            $response = [
+                'success' => false,
+                'message' => $exception->getMessage(),
+                'data' => [],
+                'error_code' => null,
+            ];
+        }
 
         return response($response);
-
     }
 
     /**
      * @param $id
      * @param Request $request
-     * @return mixed
+     * @return \Illuminate\Contracts\Routing\ResponseFactory|\Symfony\Component\HttpFoundation\Response
      */
-    public function update($id, Request $request)
+    public function update($id, UpdateBookingRequest $request)
     {
-        $data = $request->all();
+        /*
+         * We need to perform data validation before sending data to repository
+         */
+        $data = $request->validated();
+
         $cuser = $request->__authenticatedUser;
-        $response = $this->repository->updateJob($id, array_except($data, ['_token', 'submit']), $cuser);
+        try {
+            $response = [
+                'success' => true,
+                'message' => 'ok',
+                'data' => $this->repository->updateJob($id, array_except($data, ['_token', 'submit']), $cuser),
+                'error_code' => null,
+            ];
+        }catch (\Exception $exception){
+            report($exception);
+            $response = [
+                'success' => false,
+                'message' => $exception->getMessage(),
+                'data' => [],
+                'error_code' => null,
+            ];
+        }
 
         return response($response);
     }
 
     /**
      * @param Request $request
-     * @return mixed
+     * @return \Illuminate\Contracts\Routing\ResponseFactory|\Symfony\Component\HttpFoundation\Response
      */
     public function immediateJobEmail(Request $request)
     {
-        $adminSenderEmail = config('app.adminemail');
-        $data = $request->all();
+        /*
+         * We need to perform data validation before sending data to repository
+         */
+        $data = $request->validated();
 
-        $response = $this->repository->storeJobEmail($data);
+        try {
+            $response = [
+                'success' => true,
+                'message' => 'ok',
+                'data' => $this->repository->storeJobEmail($data),
+                'error_code' => null,
+            ];
+        }catch (ModelNotFoundException $exception){
+            $response = [
+                'success' => false,
+                'message' => 'Not Found',
+                'data' => [],
+                'error_code' => 404,
+            ];
+        }catch (\Exception $exception){
+            report($exception);
+            $response = [
+                'success' => false,
+                'message' => $exception->getMessage(),
+                'data' => [],
+                'error_code' => null,
+            ];
+        }
 
         return response($response);
     }
 
     /**
      * @param Request $request
-     * @return mixed
+     * @return null|\Illuminate\Contracts\Routing\ResponseFactory|\Symfony\Component\HttpFoundation\Response
      */
     public function getHistory(Request $request)
     {
-        if($user_id = $request->get('user_id')) {
+        if ($user_id = $request->get('user_id')) {
+            try {
+                $response = [
+                    'success' => true,
+                    'message' => 'ok',
+                    'data' => $this->repository->getUsersJobsHistory($user_id, $request),
+                    'error_code' => null,
+                ];
 
-            $response = $this->repository->getUsersJobsHistory($user_id, $request);
+            }catch (\Exception $exception){
+                report($exception);
+                $response = [
+                    'success' => false,
+                    'message' => $exception->getMessage(),
+                    'data' => [],
+                    'error_code' => null,
+                ];
+            }
             return response($response);
         }
 
@@ -118,158 +227,305 @@ class BookingController extends Controller
 
     /**
      * @param Request $request
-     * @return mixed
+     * @return \Illuminate\Contracts\Routing\ResponseFactory|\Symfony\Component\HttpFoundation\Response
      */
     public function acceptJob(Request $request)
     {
         $data = $request->all();
         $user = $request->__authenticatedUser;
 
-        $response = $this->repository->acceptJob($data, $user);
+        try {
+            $response = [
+                'success' => true,
+                'message' => 'ok',
+                'data' => $this->repository->acceptJob($data, $user),
+                'error_code' => null,
+            ];
 
-        return response($response);
-    }
-
-    public function acceptJobWithId(Request $request)
-    {
-        $data = $request->get('job_id');
-        $user = $request->__authenticatedUser;
-
-        $response = $this->repository->acceptJobWithId($data, $user);
+        }catch (ModelNotFoundException $exception){
+            $response = [
+                'success' => false,
+                'message' => 'Not Found',
+                'data' => [],
+                'error_code' => 404,
+            ];
+        }catch (\Exception $exception){
+            report($exception);
+            $response = [
+                'success' => false,
+                'message' => $exception->getMessage(),
+                'data' => [],
+                'error_code' => null,
+            ];
+        }
 
         return response($response);
     }
 
     /**
      * @param Request $request
-     * @return mixed
+     * @return \Illuminate\Contracts\Routing\ResponseFactory|\Symfony\Component\HttpFoundation\Response
+     */
+    public function acceptJobWithId(Request $request)
+    {
+        $job_id = $request->get('job_id');
+        $user = $request->__authenticatedUser;
+
+        try {
+            $response = [
+                'success' => true,
+                'message' => 'ok',
+                'data' => $this->repository->acceptJobWithId($job_id, $user),
+                'error_code' => null,
+            ];
+
+        }catch (ModelNotFoundException $exception){
+            $response = [
+                'success' => false,
+                'message' => 'Not Found',
+                'data' => [],
+                'error_code' => 404,
+            ];
+        }catch (\Exception $exception){
+            report($exception);
+            $response = [
+                'success' => false,
+                'message' => $exception->getMessage(),
+                'data' => [],
+                'error_code' => null,
+            ];
+        }
+
+        return response($response);
+    }
+
+    /**
+     * @param Request $request
+     * @return \Illuminate\Contracts\Routing\ResponseFactory|\Symfony\Component\HttpFoundation\Response
      */
     public function cancelJob(Request $request)
     {
         $data = $request->all();
         $user = $request->__authenticatedUser;
 
-        $response = $this->repository->cancelJobAjax($data, $user);
+        try {
+            $response = [
+                'success' => true,
+                'message' => 'ok',
+                'data' => $this->repository->cancelJob($data, $user),
+                'error_code' => null,
+            ];
+
+        }catch (ModelNotFoundException $exception){
+            $response = [
+                'success' => false,
+                'message' => 'Not Found',
+                'data' => [],
+                'error_code' => 404,
+            ];
+        }catch (\Exception $exception){
+            report($exception);
+            $response = [
+                'success' => false,
+                'message' => $exception->getMessage(),
+                'data' => [],
+                'error_code' => null,
+            ];
+        }
 
         return response($response);
     }
 
     /**
      * @param Request $request
-     * @return mixed
+     * @return \Illuminate\Contracts\Routing\ResponseFactory|\Symfony\Component\HttpFoundation\Response
      */
     public function endJob(Request $request)
     {
         $data = $request->all();
 
-        $response = $this->repository->endJob($data);
+        try {
+            $response = [
+                'success' => true,
+                'message' => 'ok',
+                'data' => $this->repository->endJob($data),
+                'error_code' => null,
+            ];
+
+        }catch (\Exception $exception){
+            report($exception);
+            $response = [
+                'success' => false,
+                'message' => $exception->getMessage(),
+                'data' => [],
+                'error_code' => null,
+            ];
+        }
 
         return response($response);
-
-    }
-
-    public function customerNotCall(Request $request)
-    {
-        $data = $request->all();
-
-        $response = $this->repository->customerNotCall($data);
-
-        return response($response);
-
     }
 
     /**
      * @param Request $request
-     * @return mixed
+     * @return \Illuminate\Contracts\Routing\ResponseFactory|\Symfony\Component\HttpFoundation\Response
+     */
+    public function customerNotCall(Request $request)
+    {
+        $data = $request->all();
+
+        try {
+            $response = [
+                'success' => true,
+                'message' => 'ok',
+                'data' => $this->repository->customerNotCall($data),
+                'error_code' => null,
+            ];
+
+        }catch (\Exception $exception){
+            report($exception);
+            $response = [
+                'success' => false,
+                'message' => $exception->getMessage(),
+                'data' => [],
+                'error_code' => null,
+            ];
+        }
+
+        return response($response);
+    }
+
+    /**
+     * @param Request $request
+     * @return \Illuminate\Contracts\Routing\ResponseFactory|\Symfony\Component\HttpFoundation\Response
      */
     public function getPotentialJobs(Request $request)
     {
-        $data = $request->all();
         $user = $request->__authenticatedUser;
 
-        $response = $this->repository->getPotentialJobs($user);
+        try {
+            $response = [
+                'success' => true,
+                'message' => 'ok',
+                'data' => $this->repository->getPotentialJobs($user),
+                'error_code' => null,
+            ];
+
+        }catch (ModelNotFoundException $exception){
+            $response = [
+                'success' => false,
+                'message' => 'Not Found',
+                'data' => [],
+                'error_code' => 404,
+            ];
+        }catch (\Exception $exception){
+            report($exception);
+            $response = [
+                'success' => false,
+                'message' => $exception->getMessage(),
+                'data' => [],
+                'error_code' => null,
+            ];
+        }
 
         return response($response);
     }
 
+    /**
+     * @param Request $request
+     * @return \Illuminate\Contracts\Routing\ResponseFactory|\Symfony\Component\HttpFoundation\Response
+     */
     public function distanceFeed(Request $request)
     {
-        $data = $request->all();
+        $data = $request->validate([
+            'distance' => 'nullable',
+            'time' => 'nullable',
+            'jobid' => 'required',
+            'session_time' => 'nullable',
+            'flagged' => 'required',
+            'admincomment' => 'nullable',
+            'manually_handled' => 'required',
+            'by_admin' => 'required',
+            'admincomment' => 'nullable',
+        ]);
 
-        if (isset($data['distance']) && $data['distance'] != "") {
-            $distance = $data['distance'];
-        } else {
-            $distance = "";
+        try {
+            $response = [
+                'success' => true,
+                'message' => 'ok',
+                'data' => $this->repository->distanceFeed($data),
+                'error_code' => null,
+            ];
+
+        }catch (\Exception $exception){
+            report($exception);
+            $response = [
+                'success' => false,
+                'message' => $exception->getMessage(),
+                'data' => [],
+                'error_code' => null,
+            ];
         }
-        if (isset($data['time']) && $data['time'] != "") {
-            $time = $data['time'];
-        } else {
-            $time = "";
-        }
-        if (isset($data['jobid']) && $data['jobid'] != "") {
-            $jobid = $data['jobid'];
-        }
-
-        if (isset($data['session_time']) && $data['session_time'] != "") {
-            $session = $data['session_time'];
-        } else {
-            $session = "";
-        }
-
-        if ($data['flagged'] == 'true') {
-            if($data['admincomment'] == '') return "Please, add comment";
-            $flagged = 'yes';
-        } else {
-            $flagged = 'no';
-        }
-        
-        if ($data['manually_handled'] == 'true') {
-            $manually_handled = 'yes';
-        } else {
-            $manually_handled = 'no';
-        }
-
-        if ($data['by_admin'] == 'true') {
-            $by_admin = 'yes';
-        } else {
-            $by_admin = 'no';
-        }
-
-        if (isset($data['admincomment']) && $data['admincomment'] != "") {
-            $admincomment = $data['admincomment'];
-        } else {
-            $admincomment = "";
-        }
-        if ($time || $distance) {
-
-            $affectedRows = Distance::where('job_id', '=', $jobid)->update(array('distance' => $distance, 'time' => $time));
-        }
-
-        if ($admincomment || $session || $flagged || $manually_handled || $by_admin) {
-
-            $affectedRows1 = Job::where('id', '=', $jobid)->update(array('admin_comments' => $admincomment, 'flagged' => $flagged, 'session_time' => $session, 'manually_handled' => $manually_handled, 'by_admin' => $by_admin));
-
-        }
-
-        return response('Record updated!');
-    }
-
-    public function reopen(Request $request)
-    {
-        $data = $request->all();
-        $response = $this->repository->reopen($data);
 
         return response($response);
     }
 
+    /**
+     * @param Request $request
+     * @return \Illuminate\Contracts\Routing\ResponseFactory|\Symfony\Component\HttpFoundation\Response
+     */
+    public function reopen(Request $request)
+    {
+        try {
+            $response = [
+                'success' => true,
+                'message' => 'ok',
+                'data' => $this->repository->reopen($request),
+                'error_code' => null,
+            ];
+
+        }catch (\Exception $exception){
+            report($exception);
+            $response = [
+                'success' => false,
+                'message' => $exception->getMessage(),
+                'data' => [],
+                'error_code' => null,
+            ];
+        }
+
+        return response($response);
+    }
+
+    /**
+     * @param Request $request
+     * @return \Illuminate\Contracts\Routing\ResponseFactory|\Symfony\Component\HttpFoundation\Response
+     */
     public function resendNotifications(Request $request)
     {
         $data = $request->all();
-        $job = $this->repository->find($data['jobid']);
-        $job_data = $this->repository->jobToData($job);
-        $this->repository->sendNotificationTranslator($job, $job_data, '*');
 
-        return response(['success' => 'Push sent']);
+        try {
+            $job = $this->repository->find($data['jobid']);
+            $job_data = $this->repository->jobToData($job);
+            $this->repository->sendNotificationTranslator($job, $job_data, '*');
+
+            $response = [
+                'success' => true,
+                'message' => 'Push sent',
+                'data' => $job_data,
+                'error_code' => null,
+            ];
+        }catch (\Exception $exception){
+            report($exception);
+            $response = [
+                'success' => false,
+                'message' => $exception->getMessage(),
+                'data' => [],
+                'error_code' => null,
+            ];
+        }
+
+        return response($response);
     }
 
     /**
@@ -280,15 +536,28 @@ class BookingController extends Controller
     public function resendSMSNotifications(Request $request)
     {
         $data = $request->all();
-        $job = $this->repository->find($data['jobid']);
-        $job_data = $this->repository->jobToData($job);
-
         try {
+            $job = $this->repository->find($data['jobid']);
+            $job_data = $this->repository->jobToData($job);
             $this->repository->sendSMSNotificationToTranslator($job);
-            return response(['success' => 'SMS sent']);
+
+            $response = [
+                'success' => true,
+                'message' => 'SMS sent',
+                'data' => $job_data,
+                'error_code' => null,
+            ];
         } catch (\Exception $e) {
-            return response(['success' => $e->getMessage()]);
+            report($exception);
+            $response = [
+                'success' => false,
+                'message' => $exception->getMessage(),
+                'data' => [],
+                'error_code' => null,
+            ];
         }
+
+        return response($response);
     }
 
 }
